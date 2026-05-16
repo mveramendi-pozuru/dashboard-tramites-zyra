@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Configuración de umbrales — Dashboard de Trámites</title>
+<style>
+  :root {
+    --verde: #1f7a3d; --verde-claro: #2e9d52;
+    --rojo: #d64545; --gris-texto: #5b6470;
+    --gris-borde: #e6e8ec; --gris-fondo: #f4f5f7; --tinta: #2b313a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--gris-fondo); color: var(--tinta); padding: 24px;
+  }
+  .caja {
+    max-width: 620px; margin: 0 auto; background: #fff;
+    border: 1px solid var(--gris-borde); border-radius: 10px; padding: 26px 30px;
+  }
+  h1 { font-size: 18px; margin-bottom: 6px; }
+  .sub { font-size: 13px; color: var(--gris-texto); margin-bottom: 20px; }
+  .grupo {
+    border: 1px solid var(--gris-borde); border-radius: 8px;
+    padding: 16px 18px; margin-bottom: 16px;
+  }
+  .grupo h2 { font-size: 14px; margin-bottom: 4px; }
+  .grupo .nota { font-size: 12px; color: var(--gris-texto); margin-bottom: 12px; }
+  .campo { display: flex; align-items: center; justify-content: space-between;
+           padding: 7px 0; }
+  .campo label { font-size: 13px; }
+  .campo input {
+    width: 90px; padding: 6px 9px; font-size: 14px;
+    border: 1px solid var(--gris-borde); border-radius: 6px; text-align: center;
+  }
+  .acciones { display: flex; gap: 10px; margin-top: 18px; }
+  .btn {
+    font-size: 13px; padding: 9px 18px; border-radius: 6px;
+    cursor: pointer; text-decoration: none; border: 1px solid var(--gris-borde);
+  }
+  .btn-primario { background: var(--verde); color: #fff; border-color: var(--verde); }
+  .btn-sec { background: #fff; color: var(--gris-texto); }
+  .msg { padding: 10px 14px; border-radius: 7px; font-size: 13px; margin-bottom: 16px; }
+  .msg-ok    { background: #e7f6ec; border: 1px solid #b6e0c4; color: #1f7a3d; }
+  .msg-error { background: #fdecec; border: 1px solid #f3bdbd; color: #b32d2d; }
+  .explica {
+    font-size: 12px; color: var(--gris-texto); margin-top: 18px;
+    border-top: 1px solid var(--gris-borde); padding-top: 14px; line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+  <div class="caja">
+    <h1>Configuración de umbrales</h1>
+    <div class="sub">
+      Definí a partir de cuántos días un trámite en curso pasa a
+      "Por vencer" y a "Vencido". Los umbrales se calculan sobre la
+      antigüedad del trámite (días desde su fecha de referencia).
+    </div>
+
+    {% if mensaje %}
+      <div class="msg {{ 'msg-ok' if exito else 'msg-error' }}">{{ mensaje }}</div>
+    {% endif %}
+
+    {% if not config_disponible %}
+      <div class="msg msg-error">
+        El usuario de la base de datos no puede escribir la tabla de
+        configuración. Se muestran los valores por defecto y no se
+        pueden guardar cambios.
+      </div>
+    {% endif %}
+
+    <form method="POST" action="{{ url_for('configuracion', token=token) }}">
+      <div class="grupo">
+        <h2>Operaciones</h2>
+        <div class="nota">Fecha de referencia: Fecha de Solicitud del trámite.</div>
+        <div class="campo">
+          <label for="op_por_vencer">Días para "Por vencer"</label>
+          <input type="number" min="1" id="op_por_vencer" name="op_por_vencer"
+                 value="{{ config.op_por_vencer }}">
+        </div>
+        <div class="campo">
+          <label for="op_vencido">Días para "Vencido"</label>
+          <input type="number" min="1" id="op_vencido" name="op_vencido"
+                 value="{{ config.op_vencido }}">
+        </div>
+      </div>
+
+      <div class="grupo">
+        <h2>Comerciales</h2>
+        <div class="nota">Fecha de referencia: Fecha de Emisión del trámite.</div>
+        <div class="campo">
+          <label for="co_por_vencer">Días para "Por vencer"</label>
+          <input type="number" min="1" id="co_por_vencer" name="co_por_vencer"
+                 value="{{ config.co_por_vencer }}">
+        </div>
+        <div class="campo">
+          <label for="co_vencido">Días para "Vencido"</label>
+          <input type="number" min="1" id="co_vencido" name="co_vencido"
+                 value="{{ config.co_vencido }}">
+        </div>
+      </div>
+
+      <div class="acciones">
+        <button type="submit" class="btn btn-primario">Guardar umbrales</button>
+        <a class="btn btn-sec" href="{{ url_for('dashboard', token=token) }}">
+          Volver al dashboard</a>
+      </div>
+    </form>
+
+    <div class="explica">
+      <strong>Cómo se interpreta:</strong> un trámite en curso con antigüedad
+      menor a "Por vencer" se muestra <em>En fecha</em>; entre "Por vencer" y
+      "Vencido" se muestra <em>Por vencer</em>; igual o mayor a "Vencido" se
+      muestra <em>Vencido</em>. El valor "Por vencer" debe ser menor que "Vencido".
+    </div>
+  </div>
+</body>
+</html>
