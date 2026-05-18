@@ -217,57 +217,63 @@ def construir_dashboard(config):
 
     co_finalizados = co_final_ok + co_final_neg
 
-    # --- Tarjetas superiores (con desglose Op | Co) ---------------------
-    tarjetas = {
-        "vencidos":    {"total": op_vencido + co_vencido,
-                        "op": op_vencido, "co": co_vencido},
-        "por_vencer":  {"total": op_por_vencer + co_por_vencer,
-                        "op": op_por_vencer, "co": co_por_vencer},
-        "en_fecha":    {"total": op_en_fecha + co_en_fecha,
-                        "op": op_en_fecha, "co": co_en_fecha},
-        "finalizados": {"total": op_finalizados + co_finalizados,
-                        "op": op_finalizados, "co": co_finalizados,
-                        "co_completadas": co_final_ok,
-                        "co_desestimadas": co_final_neg},
-    }
-
-    # --- Barras de distribución por módulo ------------------------------
-    barra_operaciones = {
-        "en_fecha": op_en_fecha, "por_vencer": op_por_vencer,
-        "vencido": op_vencido, "finalizado": op_finalizados,
-    }
-    barra_comercial = {
-        "en_fecha": co_en_fecha, "por_vencer": co_por_vencer,
-        "vencido": co_vencido, "finalizado": co_finalizados,
-    }
-
-    # --- Trámites críticos (vencidos), ordenados por antigüedad ---------
-    criticos = [x for x in (ops_en_curso + co_en_curso) if x["clase"] == "vencido"]
-    criticos.sort(key=lambda x: x["antiguedad"], reverse=True)
-
-    # --- Carga por ejecutivo (de los críticos) --------------------------
-    carga = {}
-    for c in criticos:
-        nombre = c["ejecutivo"]
-        carga[nombre] = carga.get(nombre, 0) + 1
-    carga_ejecutivos = sorted(
-        ({"ejecutivo": k, "criticos": v} for k, v in carga.items()),
-        key=lambda x: x["criticos"], reverse=True,
+    # --- Críticos (vencidos) separados por módulo, ordenados por antigüedad
+    op_criticos = sorted(
+        [x for x in ops_en_curso if x["clase"] == "vencido"],
+        key=lambda x: x["antiguedad"], reverse=True,
+    )
+    co_criticos = sorted(
+        [x for x in co_en_curso if x["clase"] == "vencido"],
+        key=lambda x: x["antiguedad"], reverse=True,
     )
 
+    # --- Carga por ejecutivo, también separada por módulo ---------------
+    def carga_por_ejecutivo(lista_criticos):
+        carga = {}
+        for c in lista_criticos:
+            carga[c["ejecutivo"]] = carga.get(c["ejecutivo"], 0) + 1
+        return sorted(
+            ({"ejecutivo": k, "criticos": v} for k, v in carga.items()),
+            key=lambda x: x["criticos"], reverse=True,
+        )
+
+    # --- "Mundo" Operaciones --------------------------------------------
+    operaciones = {
+        "contadores": {
+            "vencidos": op_vencido, "por_vencer": op_por_vencer,
+            "en_fecha": op_en_fecha, "finalizados": op_finalizados,
+        },
+        "barra": {
+            "en_fecha": op_en_fecha, "por_vencer": op_por_vencer,
+            "vencido": op_vencido, "finalizado": op_finalizados,
+        },
+        "criticos": op_criticos,
+        "carga": carga_por_ejecutivo(op_criticos),
+        "en_curso": len(ops_en_curso),
+        "sin_estado": op_sin_estado,
+    }
+
+    # --- "Mundo" Comercial ----------------------------------------------
+    comercial = {
+        "contadores": {
+            "vencidos": co_vencido, "por_vencer": co_por_vencer,
+            "en_fecha": co_en_fecha, "finalizados": co_finalizados,
+        },
+        "barra": {
+            "en_fecha": co_en_fecha, "por_vencer": co_por_vencer,
+            "vencido": co_vencido, "finalizado": co_finalizados,
+        },
+        "finalizados_detalle": {
+            "completadas": co_final_ok, "desestimadas": co_final_neg,
+        },
+        "criticos": co_criticos,
+        "carga": carga_por_ejecutivo(co_criticos),
+        "en_curso": len(co_en_curso),
+        "sin_estado": co_sin_estado,
+    }
+
     return {
-        "tarjetas": tarjetas,
-        "barra_operaciones": barra_operaciones,
-        "barra_comercial": barra_comercial,
-        "criticos": criticos,
-        "carga_ejecutivos": carga_ejecutivos,
+        "operaciones": operaciones,
+        "comercial": comercial,
         "config": config,
-        "avisos": {
-            "op_sin_estado": op_sin_estado,
-            "co_sin_estado": co_sin_estado,
-        },
-        "totales": {
-            "op_en_curso": len(ops_en_curso),
-            "co_en_curso": len(co_en_curso),
-        },
     }

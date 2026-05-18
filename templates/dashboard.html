@@ -6,117 +6,137 @@
 <title>Dashboard de Trámites — Zyra</title>
 <style>
   :root {
-    --verde:        #1f7a3d;
-    --verde-claro:  #2e9d52;
-    --rojo:         #d64545;
-    --amarillo:     #e3a008;
-    --naranja:      #dd7a1a;
-    --gris-texto:   #5b6470;
-    --gris-borde:   #e6e8ec;
-    --gris-fondo:   #f4f5f7;
-    --tinta:        #2b313a;
+    --verde: #1f7a3d; --verde-claro: #2e9d52;
+    --rojo: #d64545; --amarillo: #e3a008; --naranja: #dd7a1a;
+    --gris-texto: #5b6470; --gris-borde: #e6e8ec;
+    --gris-fondo: #f4f5f7; --tinta: #2b313a;
+    --azul-op: #2563a8; --violeta-co: #7a3da8;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background: var(--gris-fondo);
-    color: var(--tinta);
-    padding: 20px;
+    background: var(--gris-fondo); color: var(--tinta); padding: 18px;
   }
   .barra-sup {
     display: flex; justify-content: space-between; align-items: center;
-    margin-bottom: 18px;
+    margin-bottom: 16px;
   }
-  .barra-sup h1 { font-size: 19px; font-weight: 600; color: var(--tinta); }
-  .barra-sup .acciones { display: flex; gap: 10px; align-items: center; }
+  .barra-sup h1 { font-size: 19px; font-weight: 600; }
+  .acciones { display: flex; gap: 9px; align-items: center; }
   .btn {
     text-decoration: none; font-size: 13px; padding: 7px 14px;
     border-radius: 6px; border: 1px solid var(--gris-borde);
     background: #fff; color: var(--gris-texto); cursor: pointer;
   }
   .btn:hover { background: var(--gris-fondo); }
-  .actualizado { font-size: 12px; color: var(--gris-texto); }
 
-  /* --- Tarjetas superiores --- */
-  .tarjetas {
+  /* --- Dos mundos lado a lado --- */
+  .mundos { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 920px) { .mundos { grid-template-columns: 1fr; } }
+
+  .mundo {
+    background: #fff; border-radius: 12px; border: 1px solid var(--gris-borde);
+    padding: 18px 20px;
+  }
+  .mundo > .cabecera {
+    display: flex; align-items: center; gap: 9px;
+    padding-bottom: 12px; margin-bottom: 14px;
+    border-bottom: 2px solid var(--gris-borde);
+  }
+  .mundo .cabecera .titulo { font-size: 16px; font-weight: 700; }
+  .mundo .cabecera .sub { font-size: 12px; color: var(--gris-texto); margin-left: auto; }
+  .insignia {
+    width: 28px; height: 28px; border-radius: 7px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 14px; font-weight: 700;
+  }
+  .ins-op { background: var(--azul-op); }
+  .ins-co { background: var(--violeta-co); }
+
+  /* --- Contadores de cada mundo --- */
+  .contadores {
     display: grid; grid-template-columns: repeat(4, 1fr);
-    gap: 14px; margin-bottom: 14px;
+    gap: 9px; margin-bottom: 16px;
   }
-  .tarjeta {
-    background: #fff; border-radius: 10px; padding: 16px 18px;
-    border: 1px solid var(--gris-borde);
+  .cont {
+    border: 1px solid var(--gris-borde); border-radius: 8px;
+    padding: 9px 10px; text-align: center;
   }
-  .tarjeta .top { display: flex; align-items: center; gap: 7px; }
-  .punto { width: 11px; height: 11px; border-radius: 50%; flex: none; }
-  .punto.rojo     { background: var(--rojo); }
+  .cont .top {
+    display: flex; align-items: center; justify-content: center;
+    gap: 5px; font-size: 11px; color: var(--gris-texto);
+  }
+  .cont .num { font-size: 26px; font-weight: 700; margin-top: 3px; }
+  .punto { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .punto.rojo { background: var(--rojo); }
   .punto.amarillo { background: var(--amarillo); }
-  .punto.naranja  { background: var(--naranja); }
-  .punto.verde    { background: var(--verde-claro); }
-  .tarjeta .etiqueta { font-size: 13px; color: var(--gris-texto); }
-  .tarjeta .numero { font-size: 34px; font-weight: 700; margin: 6px 0 2px; }
-  .tarjeta .desglose { font-size: 12px; color: var(--gris-texto); }
-
-  /* --- Paneles --- */
-  .fila {
-    display: grid; grid-template-columns: 1fr 1fr;
-    gap: 14px; margin-bottom: 14px;
-  }
-  .panel {
-    background: #fff; border-radius: 10px; padding: 18px 20px;
-    border: 1px solid var(--gris-borde);
-  }
-  .panel h2 {
-    font-size: 15px; font-weight: 600; margin-bottom: 14px;
-    display: flex; align-items: center; gap: 7px;
-  }
+  .punto.naranja { background: var(--naranja); }
+  .punto.verde { background: var(--verde-claro); }
 
   /* --- Barra de distribución --- */
+  .seccion-tit {
+    font-size: 12px; font-weight: 600; color: var(--gris-texto);
+    text-transform: uppercase; letter-spacing: .03em; margin-bottom: 8px;
+  }
   .barra {
-    display: flex; height: 16px; border-radius: 8px;
-    overflow: hidden; margin-bottom: 12px; background: var(--gris-fondo);
+    display: flex; height: 14px; border-radius: 7px;
+    overflow: hidden; margin-bottom: 9px; background: var(--gris-fondo);
   }
   .barra span { display: block; height: 100%; }
-  .seg-en_fecha   { background: var(--naranja); }
+  .seg-en_fecha { background: var(--naranja); }
   .seg-por_vencer { background: var(--amarillo); }
-  .seg-vencido    { background: var(--rojo); }
+  .seg-vencido { background: var(--rojo); }
   .seg-finalizado { background: var(--verde-claro); }
-  .leyenda-fila {
-    display: flex; justify-content: space-between;
-    font-size: 13px; padding: 3px 0; color: var(--tinta);
+  .leyenda {
+    display: flex; flex-wrap: wrap; gap: 4px 16px; margin-bottom: 18px;
   }
-  .leyenda-fila .izq { display: flex; align-items: center; gap: 7px; }
-  .leyenda-fila .val { font-weight: 600; }
+  .leyenda div { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .leyenda b { margin-left: 2px; }
 
   /* --- Trámites críticos --- */
   .critico {
-    border-bottom: 1px solid var(--gris-borde);
-    padding: 11px 0;
+    display: flex; align-items: center; gap: 12px;
+    border-bottom: 1px solid var(--gris-borde); padding: 11px 0;
   }
   .critico:last-child { border-bottom: none; }
-  .critico .nombre { font-size: 13px; font-weight: 600; }
-  .critico .linea2 { font-size: 12px; color: var(--gris-texto); margin-top: 2px; }
-  .critico .modulo {
+  .critico .info { flex: 1; min-width: 0; }
+  .critico .nombre {
+    font-size: 13px; font-weight: 600;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .critico .estado {
     font-size: 11px; font-weight: 600; text-transform: uppercase;
-    color: var(--rojo);
+    color: var(--rojo); margin-top: 1px;
+  }
+  .critico .meta { font-size: 12px; color: var(--gris-texto); margin-top: 2px; }
+  /* El número de días, bien grande y al costado */
+  .dias-caja {
+    flex: none; width: 70px; text-align: center;
+    background: #fdecec; border: 1px solid #f3bdbd;
+    border-radius: 9px; padding: 6px 4px;
+  }
+  .dias-caja .n { font-size: 25px; font-weight: 800; color: var(--rojo); line-height: 1; }
+  .dias-caja .t {
+    font-size: 10px; color: #b32d2d; text-transform: uppercase;
+    letter-spacing: .04em; margin-top: 2px;
   }
   .vacio { font-size: 13px; color: var(--gris-texto); padding: 14px 0; }
 
   /* --- Carga por ejecutivo --- */
   .ejec {
     display: flex; justify-content: space-between; align-items: center;
-    font-size: 13px; padding: 9px 0;
+    font-size: 13px; padding: 8px 0;
     border-bottom: 1px solid var(--gris-borde);
   }
   .ejec:last-child { border-bottom: none; }
-  .ejec .nom { display: flex; align-items: center; gap: 7px; }
-  .ejec .cnt { color: var(--gris-texto); }
+  .ejec .cnt { color: var(--gris-texto); font-weight: 600; }
 
   .aviso {
-    background: #fff8e1; border: 1px solid #f0d98c;
-    color: #7a5b00; font-size: 12px; padding: 9px 12px;
-    border-radius: 8px; margin-bottom: 14px;
+    background: #fff8e1; border: 1px solid #f0d98c; color: #7a5b00;
+    font-size: 12px; padding: 7px 10px; border-radius: 7px;
+    margin-bottom: 12px;
   }
-  .ico { font-size: 15px; }
+  .ico { font-size: 14px; }
 </style>
 </head>
 <body>
@@ -124,115 +144,116 @@
   <div class="barra-sup">
     <h1>Dashboard de monitoreo de Trámites</h1>
     <div class="acciones">
-      <span class="actualizado">Trámites en curso: {{ d.totales.op_en_curso + d.totales.co_en_curso }}</span>
       <a class="btn" href="{{ url_for('dashboard', token=token) }}">Actualizar</a>
       <a class="btn" href="{{ url_for('configuracion', token=token) }}">Configurar umbrales</a>
     </div>
   </div>
 
-  {% if d.avisos.op_sin_estado or d.avisos.co_sin_estado %}
-  <div class="aviso">
-    <span class="ico">⚠️</span>
-    Hay trámites sin estado asignado que quedan fuera de los contadores:
-    {% if d.avisos.op_sin_estado %}{{ d.avisos.op_sin_estado }} en Operaciones{% endif %}
-    {% if d.avisos.op_sin_estado and d.avisos.co_sin_estado %} · {% endif %}
-    {% if d.avisos.co_sin_estado %}{{ d.avisos.co_sin_estado }} en Comercial{% endif %}.
-    Conviene revisarlos y asignarles estado en Zyra.
-  </div>
-  {% endif %}
+  {# ----- Macro que dibuja un "mundo" completo (Op o Co) ----- #}
+  {% macro mundo(titulo, sigla, clase_ins, m, finalizados_detalle=None) %}
+  <div class="mundo">
+    <div class="cabecera">
+      <div class="insignia {{ clase_ins }}">{{ sigla }}</div>
+      <div class="titulo">{{ titulo }}</div>
+      <div class="sub">{{ m.en_curso }} en curso</div>
+    </div>
 
-  <!-- Tarjetas superiores -->
-  <div class="tarjetas">
-    <div class="tarjeta">
-      <div class="top"><span class="punto rojo"></span>
-        <span class="etiqueta">Vencidos</span></div>
-      <div class="numero">{{ d.tarjetas.vencidos.total }}</div>
-      <div class="desglose">Op:{{ d.tarjetas.vencidos.op }} | Co:{{ d.tarjetas.vencidos.co }}</div>
+    {% if m.sin_estado %}
+    <div class="aviso">
+      <span class="ico">⚠️</span>
+      {{ m.sin_estado }} trámite(s) sin estado: quedan fuera del conteo.
     </div>
-    <div class="tarjeta">
-      <div class="top"><span class="punto amarillo"></span>
-        <span class="etiqueta">Por vencer</span></div>
-      <div class="numero">{{ d.tarjetas.por_vencer.total }}</div>
-      <div class="desglose">Op:{{ d.tarjetas.por_vencer.op }} | Co:{{ d.tarjetas.por_vencer.co }}</div>
-    </div>
-    <div class="tarjeta">
-      <div class="top"><span class="punto naranja"></span>
-        <span class="etiqueta">En fecha</span></div>
-      <div class="numero">{{ d.tarjetas.en_fecha.total }}</div>
-      <div class="desglose">Op:{{ d.tarjetas.en_fecha.op }} | Co:{{ d.tarjetas.en_fecha.co }}</div>
-    </div>
-    <div class="tarjeta">
-      <div class="top"><span class="punto verde"></span>
-        <span class="etiqueta">Finalizados</span></div>
-      <div class="numero">{{ d.tarjetas.finalizados.total }}</div>
-      <div class="desglose">Op:{{ d.tarjetas.finalizados.op }} | Co:{{ d.tarjetas.finalizados.co }}
-        ({{ d.tarjetas.finalizados.co_completadas }} compl. /
-         {{ d.tarjetas.finalizados.co_desestimadas }} desest.)</div>
-    </div>
-  </div>
+    {% endif %}
 
-  <!-- Barras de distribución -->
-  <div class="fila">
-    {% macro barra(titulo, datos) %}
-    {% set total = datos.en_fecha + datos.por_vencer + datos.vencido + datos.finalizado %}
-    <div class="panel">
-      <h2>{{ titulo }}</h2>
-      <div class="barra">
-        {% if total > 0 %}
-        <span class="seg-en_fecha"   style="width:{{ (datos.en_fecha   / total * 100) }}%"></span>
-        <span class="seg-por_vencer" style="width:{{ (datos.por_vencer / total * 100) }}%"></span>
-        <span class="seg-vencido"    style="width:{{ (datos.vencido    / total * 100) }}%"></span>
-        <span class="seg-finalizado" style="width:{{ (datos.finalizado / total * 100) }}%"></span>
-        {% endif %}
+    {# --- Contadores --- #}
+    <div class="contadores">
+      <div class="cont">
+        <div class="top"><span class="punto rojo"></span>Vencidos</div>
+        <div class="num">{{ m.contadores.vencidos }}</div>
       </div>
-      <div class="leyenda-fila"><div class="izq"><span class="punto naranja"></span>En fecha</div>
-        <span class="val">{{ datos.en_fecha }}</span></div>
-      <div class="leyenda-fila"><div class="izq"><span class="punto amarillo"></span>Por vencer</div>
-        <span class="val">{{ datos.por_vencer }}</span></div>
-      <div class="leyenda-fila"><div class="izq"><span class="punto rojo"></span>Vencido</div>
-        <span class="val">{{ datos.vencido }}</span></div>
-      <div class="leyenda-fila"><div class="izq"><span class="punto verde"></span>Finalizado</div>
-        <span class="val">{{ datos.finalizado }}</span></div>
+      <div class="cont">
+        <div class="top"><span class="punto amarillo"></span>Por vencer</div>
+        <div class="num">{{ m.contadores.por_vencer }}</div>
+      </div>
+      <div class="cont">
+        <div class="top"><span class="punto naranja"></span>En fecha</div>
+        <div class="num">{{ m.contadores.en_fecha }}</div>
+      </div>
+      <div class="cont">
+        <div class="top"><span class="punto verde"></span>Finalizados</div>
+        <div class="num">{{ m.contadores.finalizados }}</div>
+      </div>
     </div>
-    {% endmacro %}
-    {{ barra("Operaciones", d.barra_operaciones) }}
-    {{ barra("Comerciales", d.barra_comercial) }}
-  </div>
 
-  <!-- Trámites críticos + Carga por ejecutivo -->
-  <div class="fila">
-    <div class="panel">
-      <h2><span class="ico">🚩</span> Trámites críticos (vencidos)</h2>
-      {% if d.criticos %}
-        {% for c in d.criticos %}
-        <div class="critico">
+    {# --- Barra de distribución --- #}
+    <div class="seccion-tit">Distribución</div>
+    {% set tot = m.barra.en_fecha + m.barra.por_vencer + m.barra.vencido + m.barra.finalizado %}
+    <div class="barra">
+      {% if tot > 0 %}
+      <span class="seg-en_fecha"   style="width:{{ m.barra.en_fecha   / tot * 100 }}%"></span>
+      <span class="seg-por_vencer" style="width:{{ m.barra.por_vencer / tot * 100 }}%"></span>
+      <span class="seg-vencido"    style="width:{{ m.barra.vencido    / tot * 100 }}%"></span>
+      <span class="seg-finalizado" style="width:{{ m.barra.finalizado / tot * 100 }}%"></span>
+      {% endif %}
+    </div>
+    <div class="leyenda">
+      <div><span class="punto naranja"></span>En fecha <b>{{ m.barra.en_fecha }}</b></div>
+      <div><span class="punto amarillo"></span>Por vencer <b>{{ m.barra.por_vencer }}</b></div>
+      <div><span class="punto rojo"></span>Vencido <b>{{ m.barra.vencido }}</b></div>
+      <div><span class="punto verde"></span>Finalizado <b>{{ m.barra.finalizado }}</b></div>
+    </div>
+    {% if finalizados_detalle %}
+    <div class="leyenda" style="margin-top:-12px;">
+      <div style="color:var(--gris-texto);font-size:11px;">
+        Finalizados: {{ finalizados_detalle.completadas }} completada(s) /
+        {{ finalizados_detalle.desestimadas }} desestimada(s)
+      </div>
+    </div>
+    {% endif %}
+
+    {# --- Trámites críticos --- #}
+    <div class="seccion-tit">🚩 Trámites críticos (vencidos)</div>
+    {% if m.criticos %}
+      {% for c in m.criticos %}
+      <div class="critico">
+        <div class="info">
           <div class="nombre">{{ c.contratante }}</div>
-          <div class="modulo">{{ c.modulo }} — {{ c.estado }}</div>
-          <div class="linea2">
+          <div class="estado">{{ c.estado }}</div>
+          <div class="meta">
             Código {{ c.codigo }} · 👤 {{ c.ejecutivo }}
-            · {{ c.antiguedad }} días de antigüedad
             {% if c.ramo %} · {{ c.ramo }}{% endif %}
           </div>
         </div>
-        {% endfor %}
-      {% else %}
-        <div class="vacio">No hay trámites vencidos. 🎉</div>
-      {% endif %}
-    </div>
-
-    <div class="panel">
-      <h2><span class="ico">📊</span> Carga por ejecutivo (críticos)</h2>
-      {% if d.carga_ejecutivos %}
-        {% for e in d.carga_ejecutivos %}
-        <div class="ejec">
-          <div class="nom">👤 {{ e.ejecutivo }}</div>
-          <div class="cnt">{{ e.criticos }} crítico{{ 's' if e.criticos != 1 else '' }}</div>
+        <div class="dias-caja">
+          <div class="n">{{ c.antiguedad }}</div>
+          <div class="t">días</div>
         </div>
-        {% endfor %}
-      {% else %}
-        <div class="vacio">Sin trámites críticos para repartir.</div>
-      {% endif %}
-    </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="vacio">No hay trámites vencidos. 🎉</div>
+    {% endif %}
+
+    {# --- Carga por ejecutivo --- #}
+    <div class="seccion-tit" style="margin-top:18px;">📊 Carga por ejecutivo (críticos)</div>
+    {% if m.carga %}
+      {% for e in m.carga %}
+      <div class="ejec">
+        <div>👤 {{ e.ejecutivo }}</div>
+        <div class="cnt">{{ e.criticos }} crítico{{ 's' if e.criticos != 1 else '' }}</div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="vacio">Sin trámites críticos.</div>
+    {% endif %}
+  </div>
+  {% endmacro %}
+
+  {# ----- Las dos columnas ----- #}
+  <div class="mundos">
+    {{ mundo('Operaciones', 'OP', 'ins-op', d.operaciones) }}
+    {{ mundo('Comerciales', 'CO', 'ins-co', d.comercial,
+             d.comercial.finalizados_detalle) }}
   </div>
 
 </body>
