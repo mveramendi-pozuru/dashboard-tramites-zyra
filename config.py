@@ -14,10 +14,10 @@ NOMBRE_TABLA = "DashboardTramitesConfig"
 # Valores por defecto si la tabla está vacía (primera vez).
 # clave -> (valor_por_defecto, descripción)
 DEFAULTS = {
-    "op_por_vencer":  (3,  "Operaciones: días para pasar a 'Por vencer'"),
-    "op_vencido":     (7,  "Operaciones: días para pasar a 'Vencido'"),
-    "co_por_vencer":  (5,  "Comercial: días para pasar a 'Por vencer'"),
-    "co_vencido":     (10, "Comercial: días para pasar a 'Vencido'"),
+    "op_por_vencer":  (3,  "Operaciones: días desde Fecha Solicitud para 'Por vencer'"),
+    "op_vencido":     (7,  "Operaciones: días desde Fecha Solicitud para 'Vencido'"),
+    "co_por_vencer":  (3,  "Comercial: días desde Fecha Completado para 'Por vencer'"),
+    "co_vencido":     (7,  "Comercial: días desde Fecha Completado para 'Vencido'"),
 }
 
 

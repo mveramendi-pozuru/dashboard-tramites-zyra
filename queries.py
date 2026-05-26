@@ -1,107 +1,101 @@
 """
 Lógica de datos del Dashboard de Trámites.
 
-Reglas de negocio (relevadas y confirmadas con Carla):
-
 OPERACIONES  -> tabla `Tramite`
   - Estado en columna de texto `TramiteEstado`:
-      PENDIENTE, GESTION  -> en curso
+      PENDIENTE, GESTION  -> en curso (se evalúan por antigüedad)
       FINALIZADO          -> finalizado
   - Fecha de referencia: `TramiteFechaSolicitud`
+  (Operaciones no cambió — se evalúa desde la fecha de solicitud.)
 
 COMERCIAL    -> tabla `TramiteComercial`
-  - Estado: se usa `TramiteComercialEstado` (texto) como principal;
-    si está vacío, se cae al catálogo vía `EstadoTramiteId` (respaldo
-    durante la migración). Estados:
-      Elaboracion de propuesta / Propuesta enviada  -> en curso
-      Propuesta completada / Propuesta Desestimada  -> finalizado
-  - Fecha de referencia: `TramiteComercialFechaEmision`
+  - Estado SIEMPRE vía el FK `EstadoTramiteId` -> `EstadoTramite.EstadoTramiteDesc`.
+    (Descartamos el campo de texto. Mientras el EMI regulariza los registros
+    huérfanos, los que tienen FK NULL se muestran en un aviso para corregir.)
+  - 5 estados:
+      Elaboracion de propuesta  -> en elaboración (sin reloj)
+      Propuesta enviada         -> en elaboración (sin reloj)
+      Propuesta completada      -> el reloj de vencimiento ARRANCA acá
+      Propuesta presentada      -> cierra el reloj (cuenta como aceptada)
+      Propuesta Desestimada     -> cierra el reloj (cuenta como desestimada)
+  - Fecha de referencia del reloj: `TramiteComercialFechaCompletad`
+    (columna pendiente que el EMI agregará). Si todavía no existe, se cae
+    a `TramiteComercialFechaEmision` y se muestra un aviso.
 
-CLASIFICACIÓN TEMPORAL (solo para trámites EN CURSO):
-  antiguedad = días entre la fecha de referencia y hoy
-    antiguedad <  umbral_por_vencer  -> En fecha
+CLASIFICACIÓN TEMPORAL (solo para trámites en estado "Propuesta completada"):
+  antigüedad = días entre la fecha de completado y hoy
+    antigüedad <  umbral_por_vencer        -> En fecha
     umbral_por_vencer <= ant < umbral_vencido -> Por vencer
-    antiguedad >= umbral_vencido     -> Vencido
-
-OTRAS REGLAS:
-  - Trámites sin estado: EXCLUIDOS de todo.
-  - Fechas en BD están en UTC -> se convierten a UTC-5 con CONVERT_TZ.
-  - "Crítico" = trámite en curso clasificado como "Vencido".
+    antigüedad >= umbral_vencido           -> Vencido
 """
-from db import run_query
+from db import get_connection, run_query
 
-# Desfase horario: la BD guarda en UTC, Perú/México (sin DST) es UTC-5.
+# Desfase horario: la BD guarda en UTC, Perú es UTC-5.
 TZ_BD = "+00:00"
 TZ_LOCAL = "-05:00"
 
 
 # ==========================================================================
-# Normalización de estados
+# Estados de OPERACIONES (texto plano en Tramite.TramiteEstado)
 # ==========================================================================
-# Operaciones: valores reales en Tramite.TramiteEstado
 OP_EN_CURSO = {"PENDIENTE", "GESTION"}
 OP_FINALIZADO = {"FINALIZADO"}
 
-# Comercial: equivalencias entre el campo de texto (sin espacios) y el
-# catálogo (con espacios). Todo se compara en minúsculas para ser robusto.
-# clave normalizada -> ('en_curso' | 'final_ok' | 'final_neg', etiqueta a mostrar)
-CO_ESTADOS = {
-    "elaboracionpropuesta":     ("en_curso", "Elaboración de propuesta"),
-    "elaboraciondepropuesta":   ("en_curso", "Elaboración de propuesta"),
-    "propuestaenviada":         ("en_curso", "Propuesta enviada"),
-    "propuestacompletada":      ("final_ok", "Propuesta completada"),
-    "propuestadesestimada":     ("final_neg", "Propuesta desestimada"),
+
+# ==========================================================================
+# Estados de COMERCIAL — se identifican por UUID del catálogo EstadoTramite.
+# El catálogo de Zyra es estable: cada estado tiene un ID fijo que no cambia.
+# Mapa: EstadoTramiteId -> (categoría, etiqueta para mostrar)
+# ==========================================================================
+CO_ESTADOS_POR_ID = {
+    "b86a26a6-c459-4b52-b98e-cabcaec38847": ("en_elaboracion", "Elaboración de propuesta"),
+    "a29bed7c-7a01-46b8-9ca9-7634468c9b2b": ("presentada",     "Propuesta presentada"),
+    "3a891d6b-f427-4556-8c30-055fb360077c": ("en_curso_reloj", "Propuesta completada"),
+    "aaeabcfa-037a-46e0-afbc-647e199dbaa2": ("aceptada",       "Propuesta aceptada"),
+    "ced0944b-4712-4369-bc84-3545459bbd38": ("desestimada",    "Propuesta desestimada"),
 }
 
 
-def _norm(texto):
-    """Normaliza un estado: minúsculas y sin espacios, para comparar."""
-    return (texto or "").strip().lower().replace(" ", "")
-
-
-def clasificar_estado_comercial(texto_estado, desc_catalogo):
-    """
-    Devuelve (categoria, etiqueta) para un trámite comercial.
-    Usa el campo de texto como principal; si viene vacío, usa la
-    descripción del catálogo (respaldo durante la migración).
-    categoria: 'en_curso' | 'final_ok' | 'final_neg' | None (sin estado)
-    """
-    clave = _norm(texto_estado) or _norm(desc_catalogo)
-    if not clave:
-        return None, None
-    return CO_ESTADOS.get(clave, (None, None))
-
-
-def clasificar_temporal(antiguedad_dias, umbral_por_vencer, umbral_vencido):
-    """Clasifica un trámite EN CURSO según su antigüedad en días."""
-    if antiguedad_dias >= umbral_vencido:
+def clasificar_temporal(dias, umbral_por_vencer, umbral_vencido):
+    if dias >= umbral_vencido:
         return "vencido"
-    if antiguedad_dias >= umbral_por_vencer:
+    if dias >= umbral_por_vencer:
         return "por_vencer"
     return "en_fecha"
 
 
 # ==========================================================================
-# Lectura de trámites desde la BD
+# Detección del campo nuevo TramiteComercialFechaCompletad
+# Si la columna todavía no existe, usamos FechaEmision como fallback.
+# ==========================================================================
+def _columna_existe(tabla, columna):
+    res = run_query("""
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME   = %s
+          AND COLUMN_NAME  = %s
+        LIMIT 1
+    """, [tabla, columna])
+    return bool(res)
+
+
+# ==========================================================================
+# Lectura de la BD
 # ==========================================================================
 def _traer_operaciones():
-    """
-    Trae todos los trámites de Operaciones con los datos que el
-    dashboard necesita. La antigüedad se calcula en MySQL con CONVERT_TZ.
-    """
     sql = f"""
         SELECT
-            t.TramiteId                                   AS id,
-            t.TramiteCorrelativo                          AS codigo,
-            t.TramiteEstado                               AS estado_raw,
-            TRIM(e.EmpresaRazonSocial)                    AS contratante,
-            COALESCE(ej.EjecutivoNombres, '')             AS ejecutivo,
-            COALESCE(r.RamoNombre, '')                    AS ramo,
-            COALESCE(a.AseguradoraNombre, '')             AS aseguradora,
+            t.TramiteId                                    AS id,
+            t.TramiteCorrelativo                           AS codigo,
+            t.TramiteEstado                                AS estado_raw,
+            TRIM(e.EmpresaRazonSocial)                     AS contratante,
+            COALESCE(ej.EjecutivoNombres, '')              AS ejecutivo,
+            COALESCE(r.RamoNombre, '')                     AS ramo,
+            COALESCE(a.AseguradoraNombre, '')              AS aseguradora,
             DATEDIFF(
                 CONVERT_TZ(NOW(), '{TZ_BD}', '{TZ_LOCAL}'),
                 CONVERT_TZ(t.TramiteFechaSolicitud, '{TZ_BD}', '{TZ_LOCAL}')
-            )                                             AS antiguedad_dias
+            )                                              AS antiguedad_dias
         FROM Tramite t
         LEFT JOIN Empresa     e  ON e.EmpresaID    = t.EmpresaID
         LEFT JOIN Ejecutivo   ej ON ej.EjecutivoId = t.EjecutivoId
@@ -111,45 +105,51 @@ def _traer_operaciones():
     return run_query(sql)
 
 
-def _traer_comerciales():
-    """Trae todos los trámites Comerciales con los datos necesarios."""
+def _traer_comerciales(usar_fecha_completado):
+    """
+    Si usar_fecha_completado=True (el campo existe en BD), el reloj se
+    calcula desde TramiteComercialFechaCompletad. Si no, se cae a la
+    FechaEmision como respaldo.
+    """
+    if usar_fecha_completado:
+        fecha_reloj_sql = "tc.TramiteComercialFechaCompletad"
+    else:
+        fecha_reloj_sql = "tc.TramiteComercialFechaEmision"
+
     sql = f"""
         SELECT
-            tc.TramiteComercialId                         AS id,
-            tc.TramiteComercialCodigo                     AS codigo,
-            tc.TramiteComercialEstado                     AS estado_texto,
-            COALESCE(et.EstadoTramiteDesc, '')            AS estado_catalogo,
-            TRIM(e.EmpresaRazonSocial)                    AS contratante,
-            COALESCE(ej.EjecutivoNombres, '')             AS ejecutivo,
-            COALESCE(r.RamoNombre, '')                    AS ramo,
-            DATEDIFF(
+            tc.TramiteComercialId                          AS id,
+            tc.TramiteComercialCodigo                      AS codigo,
+            tc.EstadoTramiteId                             AS estado_id,
+            TRIM(e.EmpresaRazonSocial)                     AS contratante,
+            COALESCE(ej.EjecutivoNombres, '')              AS ejecutivo,
+            COALESCE(r.RamoNombre, '')                     AS ramo,
+            CASE
+              WHEN {fecha_reloj_sql} IS NULL THEN NULL
+              ELSE DATEDIFF(
                 CONVERT_TZ(NOW(), '{TZ_BD}', '{TZ_LOCAL}'),
-                CONVERT_TZ(tc.TramiteComercialFechaEmision, '{TZ_BD}', '{TZ_LOCAL}')
-            )                                             AS antiguedad_dias
+                CONVERT_TZ({fecha_reloj_sql}, '{TZ_BD}', '{TZ_LOCAL}')
+              )
+            END                                            AS antiguedad_dias
         FROM TramiteComercial tc
-        LEFT JOIN EstadoTramite et ON et.EstadoTramiteId = tc.EstadoTramiteId
-        LEFT JOIN Empresa       e  ON e.EmpresaID         = tc.EmpresaID
-        LEFT JOIN Ejecutivo     ej ON ej.EjecutivoId      = tc.EjecutivoId
-        LEFT JOIN Ramo          r  ON r.RamoId            = tc.RamoId
+        LEFT JOIN Empresa   e  ON e.EmpresaID    = tc.EmpresaID
+        LEFT JOIN Ejecutivo ej ON ej.EjecutivoId = tc.EjecutivoId
+        LEFT JOIN Ramo      r  ON r.RamoId       = tc.RamoId
     """
     return run_query(sql)
 
 
 # ==========================================================================
-# Construcción de los datos del dashboard
+# Construcción del dashboard
 # ==========================================================================
 def construir_dashboard(config):
-    """
-    Procesa Operaciones + Comercial y arma toda la estructura que la
-    plantilla necesita. 'config' es el dict de umbrales (de config.leer_config).
-    """
     op_pv = config["op_por_vencer"]
     op_ve = config["op_vencido"]
     co_pv = config["co_por_vencer"]
     co_ve = config["co_vencido"]
 
-    # --- Procesar OPERACIONES -------------------------------------------
-    ops_en_curso = []      # trámites en curso, ya clasificados
+    # --- OPERACIONES (sin cambios) --------------------------------------
+    ops_en_curso = []
     op_finalizados = 0
     op_sin_estado = 0
     for t in _traer_operaciones():
@@ -157,67 +157,107 @@ def construir_dashboard(config):
         if estado in OP_FINALIZADO:
             op_finalizados += 1
         elif estado in OP_EN_CURSO:
-            ant = t["antiguedad_dias"] if t["antiguedad_dias"] is not None else 0
-            clase = clasificar_temporal(ant, op_pv, op_ve)
+            ant = t["antiguedad_dias"] or 0
             ops_en_curso.append({
                 "modulo": "Operaciones",
                 "codigo": t["codigo"],
                 "contratante": t["contratante"] or "(sin contratante)",
                 "ejecutivo": t["ejecutivo"] or "Sin asignar",
                 "ramo": t["ramo"],
-                "aseguradora": t["aseguradora"],
                 "estado": "Pendiente" if estado == "PENDIENTE" else "En gestión",
                 "antiguedad": ant,
-                "clase": clase,
+                "clase": clasificar_temporal(ant, op_pv, op_ve),
             })
         else:
             op_sin_estado += 1
 
-    # --- Procesar COMERCIAL ---------------------------------------------
-    co_en_curso = []
-    co_final_ok = 0       # Propuesta completada
-    co_final_neg = 0      # Propuesta desestimada
+    op_vencido    = sum(1 for x in ops_en_curso if x["clase"] == "vencido")
+    op_por_vencer = sum(1 for x in ops_en_curso if x["clase"] == "por_vencer")
+    op_en_fecha   = sum(1 for x in ops_en_curso if x["clase"] == "en_fecha")
+
+    # --- COMERCIAL (lógica nueva) ---------------------------------------
+    campo_fecha_completado_existe = _columna_existe(
+        "TramiteComercial", "TramiteComercialFechaCompletad"
+    )
+    co_trs = _traer_comerciales(campo_fecha_completado_existe)
+
+    co_en_elaboracion = []   # estados 1 y 2: no se evalúan por antigüedad
+    co_en_curso = []         # estado 3 "Propuesta completada": el reloj corre
+    co_presentadas = 0       # estado 4 "Propuesta presentada": el reloj YA frenó
+    co_aceptadas = 0         # estado 5 "Propuesta aceptada": final positivo
+    co_desestimadas = 0      # estado 6 "Propuesta desestimada": final negativo
     co_sin_estado = 0
-    for t in _traer_comerciales():
-        categoria, etiqueta = clasificar_estado_comercial(
-            t["estado_texto"], t["estado_catalogo"]
-        )
-        if categoria == "final_ok":
-            co_final_ok += 1
-        elif categoria == "final_neg":
-            co_final_neg += 1
-        elif categoria == "en_curso":
-            ant = t["antiguedad_dias"] if t["antiguedad_dias"] is not None else 0
-            clase = clasificar_temporal(ant, co_pv, co_ve)
+    co_completadas_sin_fecha = 0  # están "completadas" pero sin fecha de completado
+
+    for t in co_trs:
+        # Lookup directo por UUID — sin normalización de strings.
+        cat, etiqueta = CO_ESTADOS_POR_ID.get(t["estado_id"], (None, None))
+        if cat is None:
+            # Estados sin asignar (estado_id NULL) o desconocidos (UUID
+            # nuevo que aún no esté en el mapa) caen acá.
+            co_sin_estado += 1
+            continue
+
+        if cat == "presentada":
+            co_presentadas += 1
+            continue
+        if cat == "aceptada":
+            co_aceptadas += 1
+            continue
+        if cat == "desestimada":
+            co_desestimadas += 1
+            continue
+        if cat == "en_elaboracion":
+            co_en_elaboracion.append({
+                "modulo": "Comercial",
+                "codigo": t["codigo"],
+                "contratante": t["contratante"] or "(sin contratante)",
+                "ejecutivo": t["ejecutivo"] or "Sin asignar",
+                "ramo": t["ramo"],
+                "estado": etiqueta,
+                "antiguedad": None,
+                "clase": "en_elaboracion",
+            })
+            continue
+        # cat == "en_curso_reloj" -> Propuesta completada
+        ant = t["antiguedad_dias"]
+        if ant is None:
+            # Está completada pero no tiene fecha de completado.
+            # Lo contamos aparte; no clasifica por antigüedad.
+            co_completadas_sin_fecha += 1
             co_en_curso.append({
                 "modulo": "Comercial",
                 "codigo": t["codigo"],
                 "contratante": t["contratante"] or "(sin contratante)",
                 "ejecutivo": t["ejecutivo"] or "Sin asignar",
                 "ramo": t["ramo"],
-                "aseguradora": "",
-                "estado": etiqueta,
-                "antiguedad": ant,
-                "clase": clase,
+                "estado": etiqueta + " (sin fecha de completado)",
+                "antiguedad": 0,
+                "clase": "sin_fecha",
             })
-        else:
-            co_sin_estado += 1
+            continue
+        co_en_curso.append({
+            "modulo": "Comercial",
+            "codigo": t["codigo"],
+            "contratante": t["contratante"] or "(sin contratante)",
+            "ejecutivo": t["ejecutivo"] or "Sin asignar",
+            "ramo": t["ramo"],
+            "estado": etiqueta,
+            "antiguedad": ant,
+            "clase": clasificar_temporal(ant, co_pv, co_ve),
+        })
 
-    # --- Contadores por clase temporal ----------------------------------
-    def contar(lista, clase):
-        return sum(1 for x in lista if x["clase"] == clase)
+    co_vencido    = sum(1 for x in co_en_curso if x["clase"] == "vencido")
+    co_por_vencer = sum(1 for x in co_en_curso if x["clase"] == "por_vencer")
+    # 'En fecha' incluye: post-completado dentro del plazo + los previos al
+    # reloj (Elaboración + Enviada). Ambos significan "está OK".
+    co_en_fecha_post_completado = sum(
+        1 for x in co_en_curso if x["clase"] == "en_fecha"
+    )
+    co_en_fecha = co_en_fecha_post_completado + len(co_en_elaboracion)
+    co_finalizados = co_aceptadas + co_desestimadas
 
-    op_vencido = contar(ops_en_curso, "vencido")
-    op_por_vencer = contar(ops_en_curso, "por_vencer")
-    op_en_fecha = contar(ops_en_curso, "en_fecha")
-
-    co_vencido = contar(co_en_curso, "vencido")
-    co_por_vencer = contar(co_en_curso, "por_vencer")
-    co_en_fecha = contar(co_en_curso, "en_fecha")
-
-    co_finalizados = co_final_ok + co_final_neg
-
-    # --- Críticos (vencidos) separados por módulo, ordenados por antigüedad
+    # --- Críticos por módulo ----------------------------------------------
     op_criticos = sorted(
         [x for x in ops_en_curso if x["clase"] == "vencido"],
         key=lambda x: x["antiguedad"], reverse=True,
@@ -227,7 +267,6 @@ def construir_dashboard(config):
         key=lambda x: x["antiguedad"], reverse=True,
     )
 
-    # --- Carga por ejecutivo, también separada por módulo ---------------
     def carga_por_ejecutivo(lista_criticos):
         carga = {}
         for c in lista_criticos:
@@ -237,7 +276,6 @@ def construir_dashboard(config):
             key=lambda x: x["criticos"], reverse=True,
         )
 
-    # --- "Mundo" Operaciones --------------------------------------------
     operaciones = {
         "contadores": {
             "vencidos": op_vencido, "por_vencer": op_por_vencer,
@@ -253,27 +291,45 @@ def construir_dashboard(config):
         "sin_estado": op_sin_estado,
     }
 
-    # --- "Mundo" Comercial ----------------------------------------------
     comercial = {
         "contadores": {
             "vencidos": co_vencido, "por_vencer": co_por_vencer,
-            "en_fecha": co_en_fecha, "finalizados": co_finalizados,
+            "en_fecha": co_en_fecha,
+            "presentadas": co_presentadas,
+            "finalizados": co_finalizados,
+            "aceptadas": co_aceptadas, "desestimadas": co_desestimadas,
         },
         "barra": {
             "en_fecha": co_en_fecha, "por_vencer": co_por_vencer,
-            "vencido": co_vencido, "finalizado": co_finalizados,
+            "vencido": co_vencido,
+            "presentadas": co_presentadas,
+            "finalizado": co_finalizados,
         },
-        "finalizados_detalle": {
-            "completadas": co_final_ok, "desestimadas": co_final_neg,
-        },
+        "en_elaboracion": co_en_elaboracion,
+        "en_elaboracion_total": len(co_en_elaboracion),
         "criticos": co_criticos,
         "carga": carga_por_ejecutivo(co_criticos),
-        "en_curso": len(co_en_curso),
+        "en_curso": len(co_en_curso),  # solo "completadas con reloj"
         "sin_estado": co_sin_estado,
+        "completadas_sin_fecha": co_completadas_sin_fecha,
     }
+
+    avisos = []
+    if not campo_fecha_completado_existe:
+        avisos.append(
+            "La columna 'TramiteComercialFechaCompletad' aún no existe "
+            "en la BD. Mientras tanto, el reloj de vencimiento de Comercial "
+            "se calcula desde la Fecha de Emisión (fallback)."
+        )
+    # Nota: los trámites en "Propuesta completada" sin fecha de completado
+    # quedan fuera del cálculo de antigüedad y no se muestran como aviso
+    # (decisión del área). El conteo sigue disponible en
+    # comercial.completadas_sin_fecha por si se necesita en el futuro.
 
     return {
         "operaciones": operaciones,
         "comercial": comercial,
         "config": config,
+        "avisos_globales": avisos,
+        "campo_fecha_completado_existe": campo_fecha_completado_existe,
     }

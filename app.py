@@ -18,6 +18,7 @@ Rutas de diagnóstico (relevamiento de la BD):
 Todas las rutas requieren ?token=<DEBUG_TOKEN>.
 """
 import os
+from datetime import datetime, timezone, timedelta
 from functools import wraps
 from flask import (
     Flask, request, jsonify, render_template, redirect, url_for
@@ -91,11 +92,15 @@ def dashboard():
             k: v[0] for k, v in cfg.DEFAULTS.items()
         }
         datos = queries.construir_dashboard(configuracion)
+        # Hora local Perú (UTC-5) para mostrar en encabezado y pie
+        ahora_peru = datetime.now(timezone.utc) - timedelta(hours=5)
         return render_template(
             "dashboard.html",
             d=datos,
             token=request.args.get("token", ""),
             config_disponible=CONFIG_DISPONIBLE,
+            ahora_iso=ahora_peru.strftime("%Y-%m-%dT%H:%M:%S"),
+            ahora_hora=ahora_peru.strftime("%H:%M:%S"),
         )
     except Exception as e:
         return f"<h2>Error al construir el dashboard</h2><pre>{e}</pre>", 500
@@ -363,6 +368,108 @@ def debug_estados_operacion():
             "total_filas": total,
             "valores_en_TramiteEstado": valores,
             "nota": "Estos son los valores reales y exactos del estado de Operaciones.",
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# --------------------------------------------------------------------------
+# /debug/inspeccionar-comercial?codigo=N
+# Inspecciona un trámite comercial por su código y muestra exactamente
+# qué valor tiene en cada uno de los DOS campos de estado.
+# Sirve para diagnosticar desincronizaciones entre Zyra y el dashboard.
+# --------------------------------------------------------------------------
+@app.route("/debug/inspeccionar-comercial")
+@requiere_token
+def debug_inspeccionar_comercial():
+    codigo = request.args.get("codigo", "").strip()
+    if not codigo or not codigo.isdigit():
+        return jsonify({"error": "Falta ?codigo=N (entero)."}), 400
+
+    try:
+        # ¿Existe la columna nueva?
+        existe_col = run_query("""
+            SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME   = 'TramiteComercial'
+              AND COLUMN_NAME  = 'TramiteComercialFechaCompletad'
+            LIMIT 1
+        """)
+        col_existe = bool(existe_col)
+
+        # Traer los campos relevantes del trámite. Solo agregamos
+        # la columna nueva en el SELECT si realmente existe.
+        if col_existe:
+            sql = """
+                SELECT
+                    tc.TramiteComercialCodigo                   AS codigo,
+                    tc.TramiteComercialFechaEmision             AS fecha_emision,
+                    tc.TramiteComercialFechaCompletad          AS fecha_completado,
+                    tc.TramiteComercialEstado                   AS estado_texto,
+                    tc.EstadoTramiteId                          AS estado_id_fk,
+                    COALESCE(et.EstadoTramiteDesc, '(sin FK)')  AS estado_via_fk,
+                    TRIM(e.EmpresaRazonSocial)                  AS contratante,
+                    DATEDIFF(
+                        CONVERT_TZ(NOW(), '+00:00', '-05:00'),
+                        CONVERT_TZ(tc.TramiteComercialFechaCompletad, '+00:00', '-05:00')
+                    )                                           AS dias_desde_completado,
+                    DATEDIFF(
+                        CONVERT_TZ(NOW(), '+00:00', '-05:00'),
+                        CONVERT_TZ(tc.TramiteComercialFechaEmision, '+00:00', '-05:00')
+                    )                                           AS dias_desde_emision
+                FROM TramiteComercial tc
+                LEFT JOIN EstadoTramite et ON et.EstadoTramiteId = tc.EstadoTramiteId
+                LEFT JOIN Empresa       e  ON e.EmpresaID         = tc.EmpresaID
+                WHERE tc.TramiteComercialCodigo = %s
+            """
+        else:
+            sql = """
+                SELECT
+                    tc.TramiteComercialCodigo                   AS codigo,
+                    tc.TramiteComercialFechaEmision             AS fecha_emision,
+                    NULL                                        AS fecha_completado,
+                    tc.TramiteComercialEstado                   AS estado_texto,
+                    tc.EstadoTramiteId                          AS estado_id_fk,
+                    COALESCE(et.EstadoTramiteDesc, '(sin FK)')  AS estado_via_fk,
+                    TRIM(e.EmpresaRazonSocial)                  AS contratante,
+                    NULL                                        AS dias_desde_completado,
+                    DATEDIFF(
+                        CONVERT_TZ(NOW(), '+00:00', '-05:00'),
+                        CONVERT_TZ(tc.TramiteComercialFechaEmision, '+00:00', '-05:00')
+                    )                                           AS dias_desde_emision
+                FROM TramiteComercial tc
+                LEFT JOIN EstadoTramite et ON et.EstadoTramiteId = tc.EstadoTramiteId
+                LEFT JOIN Empresa       e  ON e.EmpresaID         = tc.EmpresaID
+                WHERE tc.TramiteComercialCodigo = %s
+            """
+
+        filas = run_query(sql, [int(codigo)])
+
+        if not filas:
+            return jsonify({
+                "codigo": codigo,
+                "encontrado": False,
+                "mensaje": "No existe ningún trámite comercial con ese código.",
+            }), 404
+
+        f = filas[0]
+        return jsonify({
+            "encontrado": True,
+            "codigo": f["codigo"],
+            "contratante": f["contratante"],
+            "columna_FechaCompletad_existe_en_BD": col_existe,
+            "fecha_emision":     str(f["fecha_emision"]),
+            "fecha_completado":  str(f["fecha_completado"]),
+            "estado_via_FK":     f["estado_via_fk"],
+            "estado_texto":      f["estado_texto"] or "(vacío)",
+            "dias_desde_emision":    f["dias_desde_emision"],
+            "dias_desde_completado": f["dias_desde_completado"],
+            "lo_que_el_dashboard_deberia_usar":
+                ("fecha_completado" if col_existe else
+                 "fecha_emision (fallback)"),
+            "nota": "Si la columna existe pero el dashboard sigue mostrando "
+                    "días desde emisión, reiniciá la app (Ctrl+C y python app.py) "
+                    "porque la detección se hace una sola vez por arranque.",
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
