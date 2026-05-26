@@ -99,7 +99,7 @@ def dashboard():
             d=datos,
             token=request.args.get("token", ""),
             config_disponible=CONFIG_DISPONIBLE,
-            ahora_iso=ahora_peru.strftime("%Y-%m-%dT%H:%M:%S"),
+            ahora_iso=ahora_peru.strftime("%d-%m-%Y %H:%M:%S"),
             ahora_hora=ahora_peru.strftime("%H:%M:%S"),
         )
     except Exception as e:
@@ -457,7 +457,7 @@ def debug_inspeccionar_comercial():
             "encontrado": True,
             "codigo": f["codigo"],
             "contratante": f["contratante"],
-            "columna_FechaCompletad_existe_en_BD": col_existe,
+            "columna_FechaCompletado_existe_en_BD": col_existe,
             "fecha_emision":     str(f["fecha_emision"]),
             "fecha_completado":  str(f["fecha_completado"]),
             "estado_via_FK":     f["estado_via_fk"],
@@ -470,6 +470,38 @@ def debug_inspeccionar_comercial():
             "nota": "Si la columna existe pero el dashboard sigue mostrando "
                     "días desde emisión, reiniciá la app (Ctrl+C y python app.py) "
                     "porque la detección se hace una sola vez por arranque.",
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# --------------------------------------------------------------------------
+# /debug/carga
+# Muestra exactamente qué se está calculando para "Carga por Ejecutivo
+# Operativo" — sirve para verificar que queries.py se cargó correctamente.
+# --------------------------------------------------------------------------
+@app.route("/debug/carga")
+@requiere_token
+def debug_carga():
+    try:
+        configuracion = cfg.leer_config() if CONFIG_DISPONIBLE else {
+            k: v[0] for k, v in cfg.DEFAULTS.items()
+        }
+        datos = queries.construir_dashboard(configuracion)
+        op = datos["operaciones"]
+        return jsonify({
+            "tiene_campo_carga_operador": "carga_operador" in op,
+            "tiene_campo_carga_viejo": "carga" in op,
+            "carga_operador_contenido": op.get("carga_operador", "[NO EXISTE]"),
+            "cantidad_criticos_op": len(op.get("criticos", [])),
+            "criticos_con_operador": [
+                {"codigo": c["codigo"], "operador": c.get("operador", "[SIN CAMPO]")}
+                for c in op.get("criticos", [])
+            ],
+            "diagnostico": (
+                "Si 'tiene_campo_carga_operador' es false, queries.py no se "
+                "recargó. Frená Flask con Ctrl+C y volvé a hacer python app.py."
+            ),
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
