@@ -16,6 +16,7 @@
     --aceptada: #1f7a3d;
     --desestimada: #8a8f97;
     --presentada: #3a8acb;
+    --completada: #6c5fc7;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -115,6 +116,7 @@
   .punto.aceptada { background: var(--aceptada); }
   .punto.desestimada { background: var(--desestimada); }
   .punto.presentada { background: var(--presentada); }
+  .punto.completada { background: var(--completada); }
 
   /* ============== Barra y leyenda ============== */
   .seccion-tit {
@@ -130,6 +132,7 @@
   .seg-por_vencer { background: var(--amarillo); }
   .seg-vencido { background: var(--rojo); }
   .seg-presentadas { background: var(--presentada); }
+  .seg-completadas { background: var(--completada); }
   .seg-finalizado { background: var(--verde-claro); }
   .leyenda {
     display: flex; flex-wrap: wrap; gap: 4px 16px; margin-bottom: 18px;
@@ -225,11 +228,7 @@
       <div class="insignia {{ clase_ins }}">{{ sigla }}</div>
       <div class="titulo">{{ titulo }}</div>
       <div class="sub">
-        {% if es_comercial %}
-          {{ m.en_curso + m.en_elaboracion_total }} en curso
-        {% else %}
-          {{ m.en_curso }} en curso
-        {% endif %}
+        {{ m.en_curso }} en curso
       </div>
     </div>
 
@@ -248,8 +247,8 @@
           <div class="num">{{ m.contadores.por_vencer }}</div></div>
         <div class="cont"><div class="top"><span class="punto naranja"></span>En fecha</div>
           <div class="num">{{ m.contadores.en_fecha }}</div></div>
-        <div class="cont"><div class="top"><span class="punto verde"></span>Finalizados</div>
-          <div class="num">{{ m.contadores.finalizados }}</div></div>
+        <div class="cont"><div class="top"><span class="punto completada"></span>Completadas</div>
+          <div class="num">{{ m.contadores.completadas }}</div></div>
       </div>
       <div class="contadores grid3">
         <div class="cont"><div class="top"><span class="punto presentada"></span>Presentadas</div>
@@ -275,13 +274,15 @@
     {# Barra de distribución #}
     <div class="seccion-tit">Distribución</div>
     {% set presentadas = m.barra.presentadas if es_comercial else 0 %}
-    {% set tot = m.barra.en_fecha + m.barra.por_vencer + m.barra.vencido + presentadas + m.barra.finalizado %}
+    {% set completadas = m.barra.completadas if es_comercial else 0 %}
+    {% set tot = m.barra.en_fecha + m.barra.por_vencer + m.barra.vencido + completadas + presentadas + m.barra.finalizado %}
     <div class="barra">
       {% if tot > 0 %}
       <span class="seg-en_fecha"    style="width:{{ m.barra.en_fecha   / tot * 100 }}%"></span>
       <span class="seg-por_vencer"  style="width:{{ m.barra.por_vencer / tot * 100 }}%"></span>
       <span class="seg-vencido"     style="width:{{ m.barra.vencido    / tot * 100 }}%"></span>
       {% if es_comercial %}
+      <span class="seg-completadas" style="width:{{ completadas         / tot * 100 }}%"></span>
       <span class="seg-presentadas" style="width:{{ presentadas        / tot * 100 }}%"></span>
       {% endif %}
       <span class="seg-finalizado"  style="width:{{ m.barra.finalizado / tot * 100 }}%"></span>
@@ -292,16 +293,18 @@
       <div><span class="punto amarillo"></span>Por vencer <b>{{ m.barra.por_vencer }}</b></div>
       <div><span class="punto rojo"></span>Vencido <b>{{ m.barra.vencido }}</b></div>
       {% if es_comercial %}
+      <div><span class="punto completada"></span>Completadas <b>{{ completadas }}</b></div>
       <div><span class="punto presentada"></span>Presentadas <b>{{ presentadas }}</b></div>
-      {% endif %}
+      {% else %}
       <div><span class="punto verde"></span>Finalizado <b>{{ m.barra.finalizado }}</b></div>
+      {% endif %}
     </div>
     {% if es_comercial %}
       <div class="leyenda" style="margin-top:-12px;">
         <div style="color:var(--gris-texto);font-size:11px;">
-          Finalizados = {{ m.contadores.aceptadas }} aceptada(s) +
-          {{ m.contadores.desestimadas }} desestimada(s) ·
-          Presentadas en espera de respuesta del cliente
+          El reloj corre mientras está en Elaboración (desde Emisión) ·
+          Presentadas = {{ m.contadores.aceptadas }} aceptada(s) +
+          {{ m.contadores.desestimadas }} desestimada(s) + en espera de respuesta
         </div>
       </div>
     {% endif %}

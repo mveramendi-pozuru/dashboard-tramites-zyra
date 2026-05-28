@@ -16,8 +16,8 @@ NOMBRE_TABLA = "DashboardTramitesConfig"
 DEFAULTS = {
     "op_por_vencer":  (3,  "Operaciones: días desde Fecha Solicitud para 'Por vencer'"),
     "op_vencido":     (7,  "Operaciones: días desde Fecha Solicitud para 'Vencido'"),
-    "co_por_vencer":  (3,  "Comercial: días desde Fecha Completado para 'Por vencer'"),
-    "co_vencido":     (7,  "Comercial: días desde Fecha Completado para 'Vencido'"),
+    "co_por_vencer":  (3,  "Comercial: días desde Emisión (en Elaboración) para 'Por vencer'"),
+    "co_vencido":     (7,  "Comercial: días desde Emisión (en Elaboración) para 'Vencido'"),
 }
 
 
