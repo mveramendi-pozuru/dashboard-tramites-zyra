@@ -61,33 +61,10 @@ CO_ESTADOS_POR_ID = {
 }
 
 
-# ==========================================================================
-# OPERADOR de Operaciones — se asigna por nombre de ramo (regla de negocio).
-# Si el ramo no está en ningún set, queda 'Sin operador asignado'.
-# Si más adelante se quiere mover un ramo entre operadores, basta con
-# moverlo entre estos dos conjuntos.
-# ==========================================================================
-RAMOS_CATALINA = {
-    "VEHICULAR", "TRCA", "RC", "MULTIRIESGO", "ROBO Y ASALTO",
-    "DESHONESTIDAD", "DOMICILIARIO", "SOAT", "CAR", "TREC", "TRIN",
-    "CONTENEDORES", "FIANZA",
-}
-RAMOS_BENJI = {
-    "SCTR", "VIDA LEY", "FOLA", "EPS", "SALUD PRIVADO",
-    "ACCIDENTES PERSONALES", "ONCOLOGICO", "VIAJES",
-}
-
-
-def operador_por_ramo(ramo_nombre):
-    """Devuelve 'Catalina Osorio', 'Benji Chamba' o 'Sin operador asignado'."""
-    if not ramo_nombre:
-        return "Sin operador asignado"
-    nombre = ramo_nombre.strip().upper()
-    if nombre in RAMOS_CATALINA:
-        return "Catalina Osorio"
-    if nombre in RAMOS_BENJI:
-        return "Benji Chamba"
-    return "Sin operador asignado"
+# Nota: la lógica vieja de operador-por-ramo (constantes RAMOS_CATALINA/BENJI
+# y la función operador_por_ramo) se eliminó porque ahora el equipo actualiza
+# directamente el EjecutivoId de cada trámite en la BD. El JOIN con
+# Ejecutivo ya trae el nombre correcto (Catalina/Benji/etc).
 
 
 def clasificar_temporal(dias, umbral_por_vencer, umbral_vencido):
@@ -194,7 +171,9 @@ def construir_dashboard(config):
                 "contratante": t["contratante"] or "(sin contratante)",
                 "ejecutivo": t["ejecutivo"] or "Sin asignar",
                 "ramo": t["ramo"],
-                "operador": operador_por_ramo(t["ramo"]),
+                # El operador es el mismo ejecutivo (el equipo ya actualizó
+                # los EjecutivoId en la BD para que apunten a Catalina/Benji).
+                "operador": t["ejecutivo"] or "Sin operador asignado",
                 "estado": "Pendiente" if estado == "PENDIENTE" else "En gestión",
                 "antiguedad": ant,
                 "clase": clasificar_temporal(ant, op_pv, op_ve),
